@@ -31,7 +31,7 @@ def rectify(h):
     return hnew
 
 isClicked = False
-# get the points in manual mode
+# get the points
 def get_mouse_points(event, x, y, flags, param):
     global points, isClicked
     if event == cv2.EVENT_LBUTTONDOWN:
@@ -46,66 +46,37 @@ def get_mouse_points(event, x, y, flags, param):
 # get points from user
 points = []
 
-# set mode "M" for Manual or any this else for Atomatic
-mode = "M"
-
 # read the imgage
 image = cv2.imread(sys.argv[1])
 originalHeight, originalWidth, _ = image.shape
 thick = int((originalHeight + originalWidth)/300)
 
-if mode == "M":
-    cv2.namedWindow('select_points', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('select_points', 800, 600)
-    cv2.setMouseCallback("select_points", get_mouse_points)
+cv2.namedWindow('select_points', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('select_points', 800, 600)
+cv2.setMouseCallback("select_points", get_mouse_points)
+
+while(1):
+    tmpImg = image.copy()
+    key = cv2.waitKey(20) & 0xFF
+    if (key == ord('c')):
+        points = []
+
+    # draw circle in each point
+    for point in points:
+        cv2.circle(tmpImg, tuple(point), thick, (0, 0, 255), -1)
+        if (len(points) == 4):
+            cv2.drawContours(tmpImg, [np.array(points)], -1, (0, 255, 0), thick)
+        elif (len(points) > 1):
+            for i in range(1, len(points)):
+                cv2.line(tmpImg, tuple(points[i-1]), tuple(points[i]), (0, 255, 0), thick)
     
-    while(1):
-        tmpImg = image.copy()
-        key = cv2.waitKey(20) & 0xFF
-        if (key == ord('c')):
-            points = []
-
-        # draw circle in each point
-        for point in points:
-            cv2.circle(tmpImg, tuple(point), thick, (0, 0, 255), -1)
-            if (len(points) == 4):
-                cv2.drawContours(tmpImg, [np.array(points)], -1, (0, 255, 0), thick)
-            elif (len(points) > 1):
-                for i in range(1, len(points)):
-                    cv2.line(tmpImg, tuple(points[i-1]), tuple(points[i]), (0, 255, 0), thick)
-        
-        cv2.imshow("select_points", tmpImg)
-        # break if 4 points collected
-        if(len(points) == 4 and not isClicked):
-            print(points)
-            cv2.destroyAllWindows()
-            target = np.array(points)
-            break
-else:
-    # resize image so it can be processed
-    # choose optimal dimensions such that important content is not lost
-    image = cv2.resize(image, (1500, 800))
-
-    # convert to grayscale and blur to smooth
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # apply Canny Edge Detection
-    edged = cv2.Canny(blurred, 0, 50)
-    orig_edged = edged.copy()
-
-    # find the contours in the edged image
-    contours, _ = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-
-    # get approximate contour
-    for c in contours:
-        p = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * p, True)
-        cv2.drawContours(image, [approx], -1, (0, 255, 0), thick)
-        if len(approx) == 4:
-            target = approx
-            break
+    cv2.imshow("select_points", tmpImg)
+    # break if 4 points collected
+    if(len(points) == 4 and not isClicked):
+        print(points)
+        cv2.destroyAllWindows()
+        target = np.array(points)
+        break
 
 # mapping target points to 800x800 quadrilateral
 (tl, tr, br, bl) = approx = rectify(target)
