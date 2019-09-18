@@ -1,5 +1,10 @@
 import cv2
 import numpy as np
+import pytesseract
+import sys
+
+def getDistance(p1, p2):
+    return np.sqrt(((p1[0] - p2[0])**2) + ((p1[1] - p2[1])**2))
 
 # rearrange the points
 # sort points of rectangle in the following order
@@ -25,11 +30,18 @@ def rectify(h):
     hnew[3] = h[0 if tmp == 1 else 1]
     return hnew
 
+isClicked = False
 # get the points in manual mode
 def get_mouse_points(event, x, y, flags, param):
-    global points
+    global points, isClicked
     if event == cv2.EVENT_LBUTTONDOWN:
+        isClicked = True
         points.append([x,y])
+    elif isClicked and event == cv2.EVENT_MOUSEMOVE:
+        points[-1] = [x, y]
+    elif isClicked and event == cv2.EVENT_LBUTTONUP:
+        points[-1] = [x, y]
+        isClicked = False
 
 # get points from user
 points = []
@@ -38,23 +50,33 @@ points = []
 mode = "M"
 
 # read the imgage
-image = cv2.imread('images/test1.jpg')
-orig = image.copy()
+image = cv2.imread(sys.argv[1])
+originalHeight, originalWidth, _ = image.shape
+thick = int((originalHeight + originalWidth)/300)
 
 if mode == "M":
     cv2.namedWindow('select_points', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('select_points', 800, 600)
     cv2.setMouseCallback("select_points", get_mouse_points)
     
     while(1):
-        cv2.imshow("select_points", image)
+        tmpImg = image.copy()
         key = cv2.waitKey(20) & 0xFF
+        if (key == ord('c')):
+            points = []
 
         # draw circle in each point
         for point in points:
-            cv2.circle(image, tuple(point), 5, (0, 0, 255), -1)
+            cv2.circle(tmpImg, tuple(point), thick, (0, 0, 255), -1)
+            if (len(points) == 4):
+                cv2.drawContours(tmpImg, [np.array(points)], -1, (0, 255, 0), thick)
+            elif (len(points) > 1):
+                for i in range(1, len(points)):
+                    cv2.line(tmpImg, tuple(points[i-1]), tuple(points[i]), (0, 255, 0), thick)
         
+        cv2.imshow("select_points", tmpImg)
         # break if 4 points collected
-        if(len(points) == 4):
+        if(len(points) == 4 and not isClicked):
             print(points)
             cv2.destroyAllWindows()
             target = np.array(points)
@@ -80,7 +102,7 @@ else:
     for c in contours:
         p = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * p, True)
-        cv2.drawContours(image, [approx], -1, (0, 255, 0), 9)
+        cv2.drawContours(image, [approx], -1, (0, 255, 0), thick)
         if len(approx) == 4:
             target = approx
             break
@@ -92,8 +114,8 @@ cv2.drawContours(image, [approx.astype(int)], -1, (0, 255, 0), 9)
 # compute the width of the new image, which will be the
 # maximum distance between bottom-right and bottom-left
 # x-coordiates or the top-right and top-left x-coordinates
-widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+widthA = getDistance(br, bl)
+widthB = getDistance(tr, tl)
 maxWidth = max(int(widthA), int(widthB))
 
 # compute the height of the new image, which will be the
@@ -120,17 +142,19 @@ warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
 # using thresholding on warped image to get scanned effect
 warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-ret,th1 = cv2.threshold(warped,127,255,cv2.THRESH_BINARY)
-
-th2 = cv2.adaptiveThreshold(warped,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,11,2)
-th3 = cv2.adaptiveThreshold(warped,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,2)
 ret2,th4 = cv2.threshold(warped,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-cv2.namedWindow('photo', cv2.WINDOW_NORMAL)
-cv2.imshow("photo", warped)
-cv2.namedWindow('img', cv2.WINDOW_NORMAL)
-cv2.imshow("img", image)
+text = pytesseract.image_to_string(th4)
+print(text)
 
+cv2.namedWindow('photo', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('img', 800, 600)
+cv2.imshow("photo", th4)
+cv2.putText(image, text, (int(tl[0]), int(tl[1]) - 20),
+		cv2.FONT_HERSHEY_SIMPLEX, thick/8, (0, 0, 255), (int)(thick/4))
+cv2.namedWindow('img', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('img', 800, 600)
+cv2.imshow("img", image)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
