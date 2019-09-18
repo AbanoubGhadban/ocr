@@ -38,7 +38,7 @@ points = []
 mode = "M"
 
 # read the imgage
-image = cv2.imread('doc3.jpg')
+image = cv2.imread('images/test1.jpg')
 orig = image.copy()
 
 if mode == "M":
@@ -86,23 +86,50 @@ else:
             break
 
 # mapping target points to 800x800 quadrilateral
-approx = rectify(target)
+(tl, tr, br, bl) = approx = rectify(target)
 cv2.drawContours(image, [approx.astype(int)], -1, (0, 255, 0), 9)
-pts2 = np.float32([[0,0],[800,0],[800,800],[0,800]])
 
-M = cv2.getPerspectiveTransform(approx,pts2)
-dst = cv2.warpPerspective(orig,M,(800,800))
+# compute the width of the new image, which will be the
+# maximum distance between bottom-right and bottom-left
+# x-coordiates or the top-right and top-left x-coordinates
+widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+maxWidth = max(int(widthA), int(widthB))
+
+# compute the height of the new image, which will be the
+# maximum distance between the top-right and bottom-right
+# y-coordinates or the top-left and bottom-left y-coordinates
+heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+maxHeight = max(int(heightA), int(heightB))
+
+# now that we have the dimensions of the new image, construct
+# the set of destination points to obtain a "birds eye view",
+# (i.e. top-down view) of the image, again specifying points
+# in the top-left, top-right, bottom-right, and bottom-left
+# order
+dst = np.array([
+    [0, 0],
+    [maxWidth - 1, 0],
+    [maxWidth - 1, maxHeight - 1],
+    [0, maxHeight - 1]], dtype = "float32")
+
+# compute the perspective transform matrix and then apply it
+M = cv2.getPerspectiveTransform(approx, dst)
+warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
 # using thresholding on warped image to get scanned effect
-dst = cv2.cvtColor(dst, cv2.COLOR_BGR2GRAY)
-ret,th1 = cv2.threshold(dst,127,255,cv2.THRESH_BINARY)
+warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+ret,th1 = cv2.threshold(warped,127,255,cv2.THRESH_BINARY)
 
-th2 = cv2.adaptiveThreshold(dst,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,11,2)
-th3 = cv2.adaptiveThreshold(dst,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,2)
-ret2,th4 = cv2.threshold(dst,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+th2 = cv2.adaptiveThreshold(warped,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,11,2)
+th3 = cv2.adaptiveThreshold(warped,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,2)
+ret2,th4 = cv2.threshold(warped,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
 cv2.namedWindow('photo', cv2.WINDOW_NORMAL)
-cv2.imshow("photo", dst)
+cv2.imshow("photo", warped)
+cv2.namedWindow('img', cv2.WINDOW_NORMAL)
+cv2.imshow("img", image)
 
 
 cv2.waitKey(0)
