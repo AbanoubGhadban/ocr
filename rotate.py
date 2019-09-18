@@ -2,18 +2,27 @@ import cv2
 import numpy as np
 
 # rearrange the points
+# sort points of rectangle in the following order
+# top-left, top-right, bottom-right, bottom-left
 def rectify(h):
     h = h.reshape((4,2))
     hnew = np.zeros((4,2),dtype = np.float32)
 
     add = h.sum(1)
-    hnew[0] = h[np.argmin(add)]
-    hnew[2] = h[np.argmax(add)]
+    tmp = np.argmin(add)
+    hnew[0] = h[tmp]
+    # delete choosen point to ensure it will not picked again
+    add = np.delete(add, tmp)
+    h = np.delete(h, tmp, 0)
+
+    tmp = np.argmax(add)
+    hnew[2] = h[tmp]
+    h = np.delete(h, tmp, 0)    
 
     diff = np.diff(h,axis = 1)
-    hnew[1] = h[np.argmin(diff)]
-    hnew[3] = h[np.argmax(diff)]
-
+    tmp = np.argmin(diff)
+    hnew[1] = h[tmp]
+    hnew[3] = h[0 if tmp == 1 else 1]
     return hnew
 
 # get the points in manual mode
